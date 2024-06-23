@@ -104,7 +104,7 @@
 
 아래는 이 프로젝트의 ERD(Entity-Relationship Diagram)입니다.
 
-![ERD](./ERD.png)
+![ERD](doc/ERD.png)
 
 ---
 
