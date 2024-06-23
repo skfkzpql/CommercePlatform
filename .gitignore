@@ -36,5 +36,5 @@ out/
 ### VS Code ###
 .vscode/
 
-### application-local properties ###
-application-local.properties
+# .env 파일 제외
+.env
