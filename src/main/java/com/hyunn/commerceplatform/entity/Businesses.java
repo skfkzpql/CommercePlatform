@@ -9,7 +9,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Temporal;
 import jakarta.persistence.TemporalType;
 import java.util.Date;
@@ -57,22 +56,13 @@ public class Businesses {
   @Temporal(TemporalType.TIMESTAMP)
   private Date createdAt;
 
-  @Column(nullable = false)
-  @Temporal(TemporalType.TIMESTAMP)
-  private Date updatedAt;
-
   @OneToMany(mappedBy = "business")
   private List<Products> products;
 
   @PrePersist
   protected void onCreate() {
     createdAt = new Date();
-    updatedAt = new Date();
   }
 
-  @PreUpdate
-  protected void onUpdate() {
-    updatedAt = new Date();
-  }
 }
 

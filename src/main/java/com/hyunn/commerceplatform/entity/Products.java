@@ -57,9 +57,6 @@ public class Products {
   private Businesses business;
 
   @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-  private List<Reviews> reviews;
-
-  @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
   private List<OrderItems> orderItems;
 
   @PrePersist
