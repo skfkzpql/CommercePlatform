@@ -1,5 +1,6 @@
 package com.hyunn.commerceplatform.entity;
 
+import com.hyunn.commerceplatform.entity.types.UserType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
