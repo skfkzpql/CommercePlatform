@@ -1,4 +1,4 @@
-package com.hyunn.commerceplatform.entity;
+package com.hyunn.commerceplatform.entity.types;
 
 public enum TermType {
   MANDATORY,
