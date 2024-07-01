@@ -50,9 +50,9 @@ public class TokenServiceImpl implements TokenService {
   }
 
   @Override
-  public boolean validateTokenFromRedis(TokenType tokenType, String username, String token) {
+  public boolean isNotValidTokenFromRedis(TokenType tokenType, String username, String token) {
     String storedToken = getTokenFromRedis(tokenType, username);
-    return storedToken != null && storedToken.equals(token) && validateToken(token);
+    return storedToken == null || !storedToken.equals(token) || !validateToken(token);
   }
 
   @Override

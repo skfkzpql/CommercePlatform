@@ -231,7 +231,7 @@ public class UserServiceImpl implements UserService {
       throw TokenException.invalidToken();
     }
 
-    if (!tokenService.validateTokenFromRedis(TokenType.PASSWORD_RESET, username, dto.getToken())) {
+    if (tokenService.isNotValidTokenFromRedis(TokenType.PASSWORD_RESET, username, dto.getToken())) {
       throw TokenException.invalidToken();
     }
 
@@ -251,7 +251,7 @@ public class UserServiceImpl implements UserService {
   @Transactional
   public void verifyEmail(String token) {
     String username = tokenService.getUsernameFromToken(token);
-    if (!tokenService.validateTokenFromRedis(TokenType.EMAIL_VERIFICATION, username, token)) {
+    if (tokenService.isNotValidTokenFromRedis(TokenType.EMAIL_VERIFICATION, username, token)) {
       throw TokenException.invalidToken();
     }
     Users user = userRepository.findByUsername(username)

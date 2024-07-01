@@ -12,7 +12,7 @@ public interface TokenService {
 
   void removeTokenFromRedis(TokenType tokenType, String username);
 
-  boolean validateTokenFromRedis(TokenType tokenType, String username, String token);
+  boolean isNotValidTokenFromRedis(TokenType tokenType, String username, String token);
 
   boolean validateToken(String token);
 
