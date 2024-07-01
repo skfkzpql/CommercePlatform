@@ -17,7 +17,6 @@ import com.hyunn.commerceplatform.exception.UserException;
 import com.hyunn.commerceplatform.repository.TermsRepository;
 import com.hyunn.commerceplatform.repository.UserTermsRepository;
 import com.hyunn.commerceplatform.repository.UsersRepository;
-import com.hyunn.commerceplatform.security.JwtTokenProvider;
 import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.EmailService;
 import com.hyunn.commerceplatform.service.TokenService;
@@ -32,9 +31,6 @@ import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -48,8 +44,6 @@ public class UserServiceImpl implements UserService {
   private final TermsRepository termsRepository;
   private final UserTermsRepository userTermsRepository;
   private final PasswordEncoder passwordEncoder;
-  private final AuthenticationManager authenticationManager;
-  private final JwtTokenProvider jwtTokenProvider;
   private final TokenService tokenService;
   private final EmailService emailService;
   private final CacheManager cacheManager;
@@ -57,14 +51,11 @@ public class UserServiceImpl implements UserService {
   @Autowired
   public UserServiceImpl(UsersRepository usersRepository, TermsRepository termsRepository,
       UserTermsRepository userTermsRepository, PasswordEncoder passwordEncoder,
-      AuthenticationManager authenticationManager, JwtTokenProvider jwtTokenProvider,
       TokenService tokenService, EmailService emailService, CacheManager cacheManager) {
     this.userRepository = usersRepository;
     this.termsRepository = termsRepository;
     this.userTermsRepository = userTermsRepository;
     this.passwordEncoder = passwordEncoder;
-    this.authenticationManager = authenticationManager;
-    this.jwtTokenProvider = jwtTokenProvider;
     this.tokenService = tokenService;
     this.emailService = emailService;
     this.cacheManager = cacheManager;
@@ -88,7 +79,7 @@ public class UserServiceImpl implements UserService {
 
     saveUserTermAgreements(user, requestDto.getTermAgreements());
 
-    String emailToken = jwtTokenProvider.generateEmailToken(user.getUsername(), user.getEmail(),
+    String emailToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
         TokenType.EMAIL_VERIFICATION);
     tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), emailToken);
     emailService.sendVerificationEmail(user.getEmail(), emailToken);
@@ -150,24 +141,18 @@ public class UserServiceImpl implements UserService {
   }
 
   @Override
-  public Authentication loginUser(LoginRequestDto dto) {
-    try {
-      Authentication authentication = authenticationManager.authenticate(
-          new UsernamePasswordAuthenticationToken(dto.getUsername(), dto.getPassword())
-      );
-      Users user = (Users) authentication.getPrincipal();
-      if (!user.getEmailVerified()) {
-        if (tokenService.isTokenPresentInRedis(TokenType.EMAIL_VERIFICATION, user.getUsername())) {
-          tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, user.getUsername());
-        }
-        String newToken = jwtTokenProvider.generateEmailToken(user.getUsername(), user.getEmail(),
-            TokenType.EMAIL_VERIFICATION);
-        tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), newToken);
-        emailService.sendVerificationEmail(user.getEmail(), newToken);
+  public void loginUser(LoginRequestDto dto) {
+    Users user = userRepository.findByUsername(dto.getUsername()).orElseThrow(
+        UserException::userNotFound);
+
+    if (!user.getEmailVerified()) {
+      if (tokenService.isTokenPresentInRedis(TokenType.EMAIL_VERIFICATION, user.getUsername())) {
+        tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, user.getUsername());
       }
-      return authentication;
-    } catch (Exception e) {
-      throw UserException.invalidCredentials();
+      String newToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
+          TokenType.EMAIL_VERIFICATION);
+      tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), newToken);
+      emailService.sendVerificationEmail(user.getEmail(), newToken);
     }
   }
 
@@ -198,7 +183,7 @@ public class UserServiceImpl implements UserService {
     user.setEmailVerified(false);
     user = userRepository.save(user);
 
-    String emailToken = jwtTokenProvider.generateEmailToken(user.getUsername(), user.getEmail(),
+    String emailToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
         TokenType.EMAIL_VERIFICATION);
     if (tokenService.isTokenPresentInRedis(TokenType.EMAIL_VERIFICATION, user.getUsername())) {
       tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, user.getUsername());
@@ -232,7 +217,7 @@ public class UserServiceImpl implements UserService {
     if (tokenService.isTokenPresentInRedis(TokenType.PASSWORD_RESET, user.getUsername())) {
       tokenService.removeTokenFromRedis(TokenType.PASSWORD_RESET, user.getUsername());
     }
-    String resetToken = jwtTokenProvider.generateEmailToken(user.getUsername(), user.getEmail(),
+    String resetToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
         TokenType.PASSWORD_RESET);
     tokenService.saveTokenToRedis(TokenType.PASSWORD_RESET, user.getUsername(), resetToken);
     emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
@@ -265,7 +250,7 @@ public class UserServiceImpl implements UserService {
   @Override
   @Transactional
   public void verifyEmail(String token) {
-    String username = jwtTokenProvider.getUsernameFromToken(token);
+    String username = tokenService.getUsernameFromToken(token);
     if (!tokenService.validateTokenFromRedis(TokenType.EMAIL_VERIFICATION, username, token)) {
       throw TokenException.invalidToken();
     }

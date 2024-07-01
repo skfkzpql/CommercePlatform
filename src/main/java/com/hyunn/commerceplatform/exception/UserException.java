@@ -29,14 +29,6 @@ public class UserException extends RuntimeException {
     return new UserException("Invalid username or password", HttpStatus.UNAUTHORIZED);
   }
 
-  public static UserException emailNotVerified() {
-    return new UserException("Email not verified", HttpStatus.FORBIDDEN);
-  }
-
-  public static UserException invalidToken() {
-    return new UserException("Invalid or expired token", HttpStatus.UNAUTHORIZED);
-  }
-
   public static UserException passwordConfirmMismatch() {
     return new UserException("New password and confirm password do not match",
         HttpStatus.BAD_REQUEST);

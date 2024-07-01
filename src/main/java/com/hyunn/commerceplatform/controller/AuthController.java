@@ -5,6 +5,7 @@ import com.hyunn.commerceplatform.dto.auth.LoginRequestDto;
 import com.hyunn.commerceplatform.dto.auth.PasswordResetEmailRequestDto;
 import com.hyunn.commerceplatform.dto.auth.RegistrationRequestDto;
 import com.hyunn.commerceplatform.dto.auth.ResetPasswordRequestDto;
+import com.hyunn.commerceplatform.exception.UserException;
 import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
@@ -12,6 +13,8 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,11 +28,14 @@ public class AuthController {
 
   private final UserService userService;
   private final TokenService tokenService;
+  private final AuthenticationManager authenticationManager;
 
   @Autowired
-  public AuthController(UserService userService, TokenService tokenService) {
+  public AuthController(UserService userService, TokenService tokenService,
+      AuthenticationManager authenticationManager) {
     this.userService = userService;
     this.tokenService = tokenService;
+    this.authenticationManager = authenticationManager;
   }
 
   @PostMapping("/register")
@@ -41,10 +47,19 @@ public class AuthController {
 
   @PostMapping("/login")
   public ResponseEntity<?> loginUser(@Valid @RequestBody LoginRequestDto loginRequest) {
-    Authentication authentication = userService.loginUser(loginRequest);
-    SecurityContextHolder.getContext().setAuthentication(authentication);
-    JwtAuthenticationResponse tokens = tokenService.generateAuthTokens(authentication);
-    return ResponseEntity.status(HttpStatus.OK).body(tokens);
+    try {
+      Authentication authentication = authenticationManager.authenticate(
+          new UsernamePasswordAuthenticationToken(loginRequest.getUsername(),
+              loginRequest.getPassword())
+      );
+      SecurityContextHolder.getContext().setAuthentication(authentication);
+      userService.loginUser(loginRequest);
+      JwtAuthenticationResponse tokens = tokenService.generateAuthTokens(authentication);
+
+      return ResponseEntity.status(HttpStatus.OK).body(tokens);
+    } catch (Exception e) {
+      throw UserException.invalidCredentials();
+    }
   }
 
   @PostMapping("/logout")

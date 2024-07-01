@@ -20,5 +20,7 @@ public interface TokenService {
 
   JwtAuthenticationResponse generateAuthTokens(Authentication authentication);
 
+  String generateEmailToken(String username, String email, TokenType tokenType);
+
   boolean isTokenPresentInRedis(TokenType tokenType, String username);
 }

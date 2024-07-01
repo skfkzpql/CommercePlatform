@@ -79,6 +79,11 @@ public class TokenServiceImpl implements TokenService {
   }
 
   @Override
+  public String generateEmailToken(String username, String email, TokenType tokenType) {
+    return jwtTokenProvider.generateEmailToken(username, email, tokenType);
+  }
+
+  @Override
   public boolean isTokenPresentInRedis(TokenType tokenType, String username) {
     return Boolean.TRUE.equals(redisTemplate.hasKey(tokenType + username));
   }
