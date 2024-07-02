@@ -1,13 +1,14 @@
 package com.hyunn.commerceplatform.service.impl;
 
 import com.hyunn.commerceplatform.service.EmailService;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class EmailServiceImpl implements EmailService {
 
   private final JavaMailSender emailSender;
@@ -17,11 +18,6 @@ public class EmailServiceImpl implements EmailService {
 
   @Value("${app.email.password-reset-url}")
   private String passwordResetUrl;
-
-  @Autowired
-  public EmailServiceImpl(JavaMailSender emailSender) {
-    this.emailSender = emailSender;
-  }
 
   @Override
   public void sendVerificationEmail(String to, String token) {

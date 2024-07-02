@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -38,6 +38,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
   private final UsersRepository userRepository;
@@ -48,18 +49,6 @@ public class UserServiceImpl implements UserService {
   private final EmailService emailService;
   private final CacheManager cacheManager;
 
-  @Autowired
-  public UserServiceImpl(UsersRepository usersRepository, TermsRepository termsRepository,
-      UserTermsRepository userTermsRepository, PasswordEncoder passwordEncoder,
-      TokenService tokenService, EmailService emailService, CacheManager cacheManager) {
-    this.userRepository = usersRepository;
-    this.termsRepository = termsRepository;
-    this.userTermsRepository = userTermsRepository;
-    this.passwordEncoder = passwordEncoder;
-    this.tokenService = tokenService;
-    this.emailService = emailService;
-    this.cacheManager = cacheManager;
-  }
 
   @Override
   @Transactional

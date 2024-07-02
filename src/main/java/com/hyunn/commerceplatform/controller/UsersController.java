@@ -5,7 +5,7 @@ import com.hyunn.commerceplatform.dto.users.UsersEmailUpdateRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersPasswordChangeRequestDto;
 import com.hyunn.commerceplatform.service.UserService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -20,11 +20,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
+@RequiredArgsConstructor
 public class UsersController {
 
-  @Autowired
   private UserService userService;
-
 
   @GetMapping("/detail")
   public ResponseEntity<?> getUserDetail() {

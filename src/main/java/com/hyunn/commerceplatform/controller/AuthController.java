@@ -10,7 +10,7 @@ import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
 import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,19 +24,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
 
   private final UserService userService;
   private final TokenService tokenService;
   private final AuthenticationManager authenticationManager;
-
-  @Autowired
-  public AuthController(UserService userService, TokenService tokenService,
-      AuthenticationManager authenticationManager) {
-    this.userService = userService;
-    this.tokenService = tokenService;
-    this.authenticationManager = authenticationManager;
-  }
 
   @PostMapping("/register")
   public ResponseEntity<?> registerUser(

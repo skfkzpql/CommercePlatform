@@ -6,23 +6,17 @@ import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.TokenService;
 import io.jsonwebtoken.Claims;
 import java.util.concurrent.TimeUnit;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class TokenServiceImpl implements TokenService {
 
   private final RedisTemplate<String, String> redisTemplate;
   private final JwtTokenProvider jwtTokenProvider;
-
-  @Autowired
-  public TokenServiceImpl(RedisTemplate<String, String> redisTemplate,
-      JwtTokenProvider jwtTokenProvider) {
-    this.redisTemplate = redisTemplate;
-    this.jwtTokenProvider = jwtTokenProvider;
-  }
 
   @Override
   public void saveTokenToRedis(TokenType tokenType, String username, String token) {
