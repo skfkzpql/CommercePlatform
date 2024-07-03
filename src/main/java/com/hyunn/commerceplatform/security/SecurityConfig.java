@@ -1,7 +1,5 @@
-package com.hyunn.commerceplatform.config;
+package com.hyunn.commerceplatform.security;
 
-import com.hyunn.commerceplatform.security.JwtAuthenticationFilter;
-import com.hyunn.commerceplatform.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
