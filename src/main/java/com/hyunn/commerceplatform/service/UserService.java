@@ -7,9 +7,8 @@ import com.hyunn.commerceplatform.dto.auth.ResetPasswordRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersDetailResponseDto;
 import com.hyunn.commerceplatform.dto.users.UsersEmailUpdateRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersPasswordChangeRequestDto;
-import org.springframework.security.core.userdetails.UserDetailsService;
 
-public interface UserService extends UserDetailsService {
+public interface UserService {
 
   void registerUser(RegistrationRequestDto registrationRequest);
 

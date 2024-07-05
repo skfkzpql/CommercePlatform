@@ -1,6 +1,5 @@
 package com.hyunn.commerceplatform.entity;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hyunn.commerceplatform.entity.types.UserType;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -15,22 +14,17 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Temporal;
 import jakarta.persistence.TemporalType;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.UserDetails;
 
 @Entity
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class Users implements UserDetails {
+public class Users {
 
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -85,17 +79,6 @@ public class Users implements UserDetails {
   @PreUpdate
   protected void onUpdate() {
     updatedAt = new Date();
-  }
-
-  @Override
-  public Collection<? extends GrantedAuthority> getAuthorities() {
-    return Collections.singleton(new SimpleGrantedAuthority("ROLE_" + userType.name()));
-  }
-
-  @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
-  @Override
-  public String getUsername() {
-    return this.username;
   }
 
 }

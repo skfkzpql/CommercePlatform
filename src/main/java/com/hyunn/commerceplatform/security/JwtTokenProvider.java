@@ -6,8 +6,6 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Date;
 import java.util.stream.Collectors;
 import javax.crypto.SecretKey;
@@ -16,26 +14,22 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
 public class JwtTokenProvider {
 
+  private final CustomUserDetailsService userDetailsService;
   @Value("${app.security.jwt.secret}")
   private String secretKey;
-
   @Value("${app.security.jwt.access-token-expiration-milliseconds}")
   private long accessTokenExpirationInMs;
-
   @Value("${app.security.jwt.refresh-token-expiration-milliseconds}")
   private long refreshTokenExpirationInMs;
-
   @Value("${app.security.token.email-verification-validity-seconds}")
   private long emailTokenValiditySeconds;
-
   private SecretKey key;
 
   @PostConstruct
@@ -78,13 +72,12 @@ public class JwtTokenProvider {
   }
 
   public String getUsernameFromToken(String token) {
-    Claims claims = Jwts.parserBuilder()
+    return Jwts.parserBuilder()
         .setSigningKey(key)
         .build()
         .parseClaimsJws(token)
-        .getBody();
-
-    return claims.getSubject();
+        .getBody()
+        .getSubject();
   }
 
   public boolean validateToken(String token) {
@@ -97,20 +90,9 @@ public class JwtTokenProvider {
   }
 
   public Authentication getAuthentication(String token) {
-    Claims claims = Jwts.parserBuilder()
-        .setSigningKey(key)
-        .build()
-        .parseClaimsJws(token)
-        .getBody();
-
-    Collection<? extends GrantedAuthority> authorities =
-        Arrays.stream(claims.get("authorities").toString().split(","))
-            .map(SimpleGrantedAuthority::new)
-            .collect(Collectors.toList());
-
-    User principal = new User(claims.getSubject(), "", authorities);
-
-    return new UsernamePasswordAuthenticationToken(principal, token, authorities);
+    String username = getUsernameFromToken(token);
+    UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+    return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
   }
 
   public Claims getClaimsFromToken(String token) {
