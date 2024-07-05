@@ -26,5 +26,7 @@ public interface UserService {
 
   void resetPassword(ResetPasswordRequestDto resetPasswordRequestDto);
 
-  void verifyEmail(String email);
+  void verifyEmail(String token);
+
+  void cleanupOldLoginLogs();
 }

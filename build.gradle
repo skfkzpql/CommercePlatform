@@ -44,6 +44,7 @@ dependencies {
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     implementation 'org.modelmapper:modelmapper:3.1.1'
+    implementation 'com.maxmind.geoip2:geoip2:2.15.0'
 
     // AWS SDK
     implementation platform('software.amazon.awssdk:bom:2.21.1')

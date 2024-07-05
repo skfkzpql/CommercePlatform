@@ -8,12 +8,15 @@ import com.hyunn.commerceplatform.dto.users.UserTermAgreementDto;
 import com.hyunn.commerceplatform.dto.users.UsersDetailResponseDto;
 import com.hyunn.commerceplatform.dto.users.UsersEmailUpdateRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersPasswordChangeRequestDto;
+import com.hyunn.commerceplatform.entity.LoginLog;
 import com.hyunn.commerceplatform.entity.Terms;
 import com.hyunn.commerceplatform.entity.UserTerms;
 import com.hyunn.commerceplatform.entity.Users;
 import com.hyunn.commerceplatform.entity.types.TermType;
+import com.hyunn.commerceplatform.entity.types.UserType;
 import com.hyunn.commerceplatform.exception.TokenException;
 import com.hyunn.commerceplatform.exception.UserException;
+import com.hyunn.commerceplatform.repository.LoginLogRepository;
 import com.hyunn.commerceplatform.repository.TermsRepository;
 import com.hyunn.commerceplatform.repository.UserTermsRepository;
 import com.hyunn.commerceplatform.repository.UsersRepository;
@@ -22,6 +25,14 @@ import com.hyunn.commerceplatform.service.EmailService;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
 import com.hyunn.commerceplatform.util.ModelMapperUtil;
+import com.maxmind.geoip2.DatabaseReader;
+import com.maxmind.geoip2.exception.GeoIp2Exception;
+import com.maxmind.geoip2.model.CityResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import java.io.File;
+import java.io.IOException;
+import java.net.InetAddress;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -29,8 +40,10 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,11 +55,18 @@ public class UserServiceImpl implements UserService {
   private final UsersRepository userRepository;
   private final TermsRepository termsRepository;
   private final UserTermsRepository userTermsRepository;
+  private final LoginLogRepository loginLogRepository;
   private final PasswordEncoder passwordEncoder;
   private final TokenService tokenService;
   private final EmailService emailService;
   private final CacheManager cacheManager;
+  private final HttpServletRequest request;
 
+  @Value("${geoip.database.path}")
+  private String geoIpDatabasePath;
+
+  @Value("${login.log.retention.days}")
+  private int loginLogRetentionDays;
 
   @Override
   @Transactional
@@ -61,6 +81,7 @@ public class UserServiceImpl implements UserService {
     validateMandatoryTermsAgreement(requestDto.getTermAgreements());
 
     Users user = ModelMapperUtil.map(requestDto, Users.class);
+    user.setUserType(UserType.CONSUMER);
     user.setPassword(passwordEncoder.encode(requestDto.getPassword()));
     user = userRepository.save(user);
 
@@ -140,6 +161,52 @@ public class UserServiceImpl implements UserService {
           TokenType.EMAIL_VERIFICATION);
       tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), newToken);
       emailService.sendVerificationEmail(user.getEmail(), newToken);
+    }
+
+    recordLoginLocation(user);
+  }
+
+  private void recordLoginLocation(Users user) {
+    String ipAddress = getClientIpAddress();
+    String location = getLocationFromIp(ipAddress);
+
+    LoginLog loginLog = new LoginLog();
+    loginLog.setUser(user);
+    loginLog.setIpAddress(ipAddress);
+    loginLog.setLocation(location);
+    loginLog.setLoginTime(LocalDateTime.now());
+
+    loginLogRepository.save(loginLog);
+  }
+
+  private String getClientIpAddress() {
+    String ipAddress = request.getHeader("X-Forwarded-For");
+    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+      ipAddress = request.getHeader("Proxy-Client-IP");
+    }
+    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+      ipAddress = request.getHeader("WL-Proxy-Client-IP");
+    }
+    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
+      ipAddress = request.getRemoteAddr();
+    }
+    return ipAddress;
+  }
+
+  private String getLocationFromIp(String ipAddress) {
+    File database = new File(geoIpDatabasePath);
+    try (DatabaseReader reader = new DatabaseReader.Builder(database).build()) {
+      InetAddress inetAddress = InetAddress.getByName(ipAddress);
+      CityResponse response = reader.city(inetAddress);
+
+      String countryName = response.getCountry().getName();
+      String cityName = response.getCity().getName();
+
+      return cityName != null && !cityName.isEmpty()
+          ? cityName + ", " + countryName
+          : countryName;
+    } catch (IOException | GeoIp2Exception e) {
+      return "Unknown";
     }
   }
 
@@ -246,5 +313,12 @@ public class UserServiceImpl implements UserService {
     user.setEmailVerified(true);
     userRepository.save(user);
     tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, username);
+  }
+
+  @Scheduled(cron = "0 0 1 * * ?") // 매일 새벽 1시에 실행
+  @Transactional
+  public void cleanupOldLoginLogs() {
+    LocalDateTime cutoffDate = LocalDateTime.now().minusDays(loginLogRetentionDays);
+    loginLogRepository.deleteOlderThan(cutoffDate);
   }
 }
