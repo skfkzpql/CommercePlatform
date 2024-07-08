@@ -1,5 +1,9 @@
 package com.hyunn.commerceplatform.security;
 
+import com.hyunn.commerceplatform.security.handler.CustomAuthenticationFailureHandler;
+import com.hyunn.commerceplatform.security.handler.CustomAuthenticationSuccessHandler;
+import com.hyunn.commerceplatform.service.LoginLogService;
+import com.hyunn.commerceplatform.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,8 +16,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.access.AccessDeniedHandlerImpl;
-import org.springframework.security.web.authentication.Http403ForbiddenEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
@@ -21,7 +23,10 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-  private JwtTokenProvider jwtTokenProvider;
+  private final JwtTokenProvider jwtTokenProvider;
+  private final UserService userService;
+  private final LoginLogService loginLogService;
+  private final CustomUserDetailsService customUserDetailsService;
 
   @Bean
   public PasswordEncoder passwordEncoder() {
@@ -35,6 +40,16 @@ public class SecurityConfig {
   }
 
   @Bean
+  public CustomAuthenticationSuccessHandler authenticationSuccessHandler() {
+    return new CustomAuthenticationSuccessHandler(userService, loginLogService);
+  }
+
+  @Bean
+  public CustomAuthenticationFailureHandler authenticationFailureHandler() {
+    return new CustomAuthenticationFailureHandler(userService);
+  }
+
+  @Bean
   public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
     http
         .httpBasic(AbstractHttpConfigurer::disable)
@@ -42,18 +57,19 @@ public class SecurityConfig {
         .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(
             SessionCreationPolicy.STATELESS))
         .authorizeHttpRequests(authorize -> authorize
-            .requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**", "/auth/login")
-            .permitAll()
+            .requestMatchers("/v3/api-docs/**", "/swagger-ui.html", "/swagger-ui/**",
+                "/api/auth/**").permitAll()
             .anyRequest().authenticated()
         )
-        .exceptionHandling(exceptionHandling -> exceptionHandling
-            .accessDeniedHandler(new AccessDeniedHandlerImpl())
-            .authenticationEntryPoint(new Http403ForbiddenEntryPoint())
+        .formLogin(form -> form
+            .loginProcessingUrl("/api/auth/login")
+            .successHandler(authenticationSuccessHandler())
+            .failureHandler(authenticationFailureHandler())
         )
+        .userDetailsService(customUserDetailsService)
         .addFilterBefore(new JwtAuthenticationFilter(jwtTokenProvider),
             UsernamePasswordAuthenticationFilter.class);
 
     return http.build();
   }
-
 }

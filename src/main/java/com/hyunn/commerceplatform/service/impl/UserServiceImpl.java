@@ -1,6 +1,5 @@
 package com.hyunn.commerceplatform.service.impl;
 
-import com.hyunn.commerceplatform.dto.auth.LoginRequestDto;
 import com.hyunn.commerceplatform.dto.auth.PasswordResetEmailRequestDto;
 import com.hyunn.commerceplatform.dto.auth.RegistrationRequestDto;
 import com.hyunn.commerceplatform.dto.auth.ResetPasswordRequestDto;
@@ -8,93 +7,85 @@ import com.hyunn.commerceplatform.dto.users.UserTermAgreementDto;
 import com.hyunn.commerceplatform.dto.users.UsersDetailResponseDto;
 import com.hyunn.commerceplatform.dto.users.UsersEmailUpdateRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersPasswordChangeRequestDto;
-import com.hyunn.commerceplatform.entity.LoginLog;
 import com.hyunn.commerceplatform.entity.Terms;
 import com.hyunn.commerceplatform.entity.UserTerms;
 import com.hyunn.commerceplatform.entity.Users;
-import com.hyunn.commerceplatform.entity.types.TermType;
 import com.hyunn.commerceplatform.entity.types.UserType;
 import com.hyunn.commerceplatform.exception.TokenException;
 import com.hyunn.commerceplatform.exception.UserException;
-import com.hyunn.commerceplatform.repository.LoginLogRepository;
 import com.hyunn.commerceplatform.repository.TermsRepository;
 import com.hyunn.commerceplatform.repository.UserTermsRepository;
 import com.hyunn.commerceplatform.repository.UsersRepository;
 import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.EmailService;
+import com.hyunn.commerceplatform.service.MandatoryTermsCacheService;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
 import com.hyunn.commerceplatform.util.ModelMapperUtil;
-import com.maxmind.geoip2.DatabaseReader;
-import com.maxmind.geoip2.exception.GeoIp2Exception;
-import com.maxmind.geoip2.model.CityResponse;
-import jakarta.servlet.http.HttpServletRequest;
-import java.io.File;
-import java.io.IOException;
-import java.net.InetAddress;
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
 
   private final UsersRepository userRepository;
   private final TermsRepository termsRepository;
   private final UserTermsRepository userTermsRepository;
-  private final LoginLogRepository loginLogRepository;
   private final PasswordEncoder passwordEncoder;
   private final TokenService tokenService;
   private final EmailService emailService;
-  private final CacheManager cacheManager;
-  private final HttpServletRequest request;
+  private final MandatoryTermsCacheService mandatoryTermsCacheService;
 
-  @Value("${geoip.database.path}")
-  private String geoIpDatabasePath;
+  @Value("${app.login.max-fail-attempts}")
+  private int maxFailAttempts;
 
-  @Value("${login.log.retention.days}")
-  private int loginLogRetentionDays;
+  @Value("${app.login.lock-duration-minutes}")
+  private int lockDurationMinutes;
 
+  // 사용자 등록 관련 메서드
   @Override
   @Transactional
   public void registerUser(RegistrationRequestDto requestDto) {
-    if (userRepository.findByUsername(requestDto.getUsername()).isPresent()) {
-      throw UserException.usernameAlreadyExists();
-    }
-    if (userRepository.findByEmail(requestDto.getEmail()).isPresent()) {
-      throw UserException.emailAlreadyExists();
-    }
-
+    validateUniqueUsername(requestDto.getUsername());
+    validateUniqueEmail(requestDto.getEmail());
     validateMandatoryTermsAgreement(requestDto.getTermAgreements());
 
-    Users user = ModelMapperUtil.map(requestDto, Users.class);
-    user.setUserType(UserType.CONSUMER);
-    user.setPassword(passwordEncoder.encode(requestDto.getPassword()));
+    Users user = createUserFromDto(requestDto);
     user = userRepository.save(user);
 
     saveUserTermAgreements(user, requestDto.getTermAgreements());
+    sendVerificationEmail(user);
+  }
 
-    String emailToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
-        TokenType.EMAIL_VERIFICATION);
-    tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), emailToken);
-    emailService.sendVerificationEmail(user.getEmail(), emailToken);
+  private void validateUniqueUsername(String username) {
+    if (userRepository.findByUsername(username).isPresent()) {
+      throw UserException.usernameAlreadyExists();
+    }
+  }
+
+  private void validateUniqueEmail(String email) {
+    if (userRepository.findByEmail(email).isPresent()) {
+      throw UserException.emailAlreadyExists();
+    }
   }
 
   private void validateMandatoryTermsAgreement(List<UserTermAgreementDto> termAgreements) {
-    Set<Long> mandatoryTermIds = getMandatoryTermIds();
+    Set<Long> mandatoryTermIds = mandatoryTermsCacheService.getMandatoryTermIds();
     Set<Long> agreedMandatoryTermIds = termAgreements.stream()
         .filter(UserTermAgreementDto::getAgreed)
         .map(UserTermAgreementDto::getTermId)
@@ -106,219 +97,209 @@ public class UserServiceImpl implements UserService {
     }
   }
 
+  private Users createUserFromDto(RegistrationRequestDto dto) {
+    Users user = ModelMapperUtil.map(dto, Users.class);
+    user.setUserType(UserType.CONSUMER);
+    user.setPassword(passwordEncoder.encode(dto.getPassword()));
+    return user;
+  }
+
   private void saveUserTermAgreements(Users user, List<UserTermAgreementDto> termAgreements) {
     Map<Long, Terms> termsMap = termsRepository.findAllById(
         termAgreements.stream().map(UserTermAgreementDto::getTermId).collect(Collectors.toList())
     ).stream().collect(Collectors.toMap(Terms::getId, Function.identity()));
 
     List<UserTerms> userTermsList = termAgreements.stream()
-        .map(agreementDto -> {
-          Terms term = termsMap.get(agreementDto.getTermId());
-          if (term == null) {
-            throw UserException.invalidTermId(agreementDto.getTermId());
-          }
-          return UserTerms.builder()
-              .user(user)
-              .term(term)
-              .agreed(agreementDto.getAgreed())
-              .build();
-        })
+        .map(agreementDto -> createUserTerm(user, agreementDto, termsMap))
         .collect(Collectors.toList());
 
     userTermsRepository.saveAll(userTermsList);
   }
 
-  private Set<Long> getMandatoryTermIds() {
-    Cache cache = cacheManager.getCache("mandatoryTerms");
-    if (cache != null) {
-      Set<Long> cachedIds = cache.get("ids", Set.class);
-      if (cachedIds != null && cachedIds.stream().allMatch(id -> id instanceof Long)) {
-        return new HashSet<>(cachedIds);
-      }
+  private UserTerms createUserTerm(Users user, UserTermAgreementDto agreementDto,
+      Map<Long, Terms> termsMap) {
+    Terms term = termsMap.get(agreementDto.getTermId());
+    if (term == null) {
+      throw UserException.invalidTermId(agreementDto.getTermId());
     }
-
-    Set<Long> mandatoryTermIds = termsRepository.findByType(TermType.MANDATORY).stream()
-        .map(Terms::getId)
-        .collect(Collectors.toSet());
-
-    if (cache != null) {
-      cache.put("ids", mandatoryTermIds);
-    }
-
-    return mandatoryTermIds;
+    return UserTerms.builder()
+        .user(user)
+        .term(term)
+        .agreed(agreementDto.getAgreed())
+        .build();
   }
 
-  @Override
-  public void loginUser(LoginRequestDto dto) {
-    Users user = userRepository.findByUsername(dto.getUsername()).orElseThrow(
-        UserException::userNotFound);
-
-    if (!user.getEmailVerified()) {
-      if (tokenService.isTokenPresentInRedis(TokenType.EMAIL_VERIFICATION, user.getUsername())) {
-        tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, user.getUsername());
-      }
-      String newToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
-          TokenType.EMAIL_VERIFICATION);
-      tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), newToken);
-      emailService.sendVerificationEmail(user.getEmail(), newToken);
-    }
-
-    recordLoginLocation(user);
-  }
-
-  private void recordLoginLocation(Users user) {
-    String ipAddress = getClientIpAddress();
-    String location = getLocationFromIp(ipAddress);
-
-    LoginLog loginLog = new LoginLog();
-    loginLog.setUser(user);
-    loginLog.setIpAddress(ipAddress);
-    loginLog.setLocation(location);
-    loginLog.setLoginTime(LocalDateTime.now());
-
-    loginLogRepository.save(loginLog);
-  }
-
-  private String getClientIpAddress() {
-    String ipAddress = request.getHeader("X-Forwarded-For");
-    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
-      ipAddress = request.getHeader("Proxy-Client-IP");
-    }
-    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
-      ipAddress = request.getHeader("WL-Proxy-Client-IP");
-    }
-    if (ipAddress == null || ipAddress.isEmpty() || "unknown".equalsIgnoreCase(ipAddress)) {
-      ipAddress = request.getRemoteAddr();
-    }
-    return ipAddress;
-  }
-
-  private String getLocationFromIp(String ipAddress) {
-    File database = new File(geoIpDatabasePath);
-    try (DatabaseReader reader = new DatabaseReader.Builder(database).build()) {
-      InetAddress inetAddress = InetAddress.getByName(ipAddress);
-      CityResponse response = reader.city(inetAddress);
-
-      String countryName = response.getCountry().getName();
-      String cityName = response.getCity().getName();
-
-      return cityName != null && !cityName.isEmpty()
-          ? cityName + ", " + countryName
-          : countryName;
-    } catch (IOException | GeoIp2Exception e) {
-      return "Unknown";
-    }
-  }
-
+  // 사용자 정보 조회 및 수정 관련 메서드
   @Override
   public UsersDetailResponseDto getUserByUsername(String username) {
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
+    Users user = getUserOrThrow(username);
     return ModelMapperUtil.map(user, UsersDetailResponseDto.class);
   }
 
   @Override
   @Transactional
   public void deleteUser(String username) {
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
+    Users user = getUserOrThrow(username);
     userRepository.delete(user);
   }
 
   @Override
   @Transactional
   public void updateEmail(String username, UsersEmailUpdateRequestDto dto) {
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
-    if (userRepository.findByEmail(dto.getNewEmail()).isPresent()) {
-      throw UserException.emailAlreadyExists();
-    }
-    user.setEmail(dto.getNewEmail());
-    user.setEmailVerified(false);
-    user = userRepository.save(user);
-
-    String emailToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
-        TokenType.EMAIL_VERIFICATION);
-    if (tokenService.isTokenPresentInRedis(TokenType.EMAIL_VERIFICATION, user.getUsername())) {
-      tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, user.getUsername());
-    }
-    tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), emailToken);
-    emailService.sendVerificationEmail(user.getEmail(), emailToken);
+    Users user = getUserOrThrow(username);
+    validateUniqueEmail(dto.getNewEmail());
+    updateUserEmail(user, dto.getNewEmail());
   }
 
   @Override
   @Transactional
   public void updatePassword(String username, UsersPasswordChangeRequestDto dto) {
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
+    Users user = getUserOrThrow(username);
+    validatePasswordChange(user, dto);
+    updateUserPassword(user, dto.getNewPassword());
+  }
+
+  private void validatePasswordChange(Users user, UsersPasswordChangeRequestDto dto) {
     if (!passwordEncoder.matches(dto.getCurrentPassword(), user.getPassword())) {
       throw UserException.invalidCurrentPassword();
     }
     if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
       throw UserException.passwordConfirmMismatch();
     }
-    user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+  }
+
+  private void updateUserPassword(Users user, String newPassword) {
+    user.setPassword(passwordEncoder.encode(newPassword));
     userRepository.save(user);
   }
 
+  private void updateUserEmail(Users user, String newEmail) {
+    user.setEmail(newEmail);
+    user.setEmailVerified(false);
+    userRepository.save(user);
+    sendVerificationEmail(user);
+  }
+
+  @Async
   @Override
-  public void sendPasswordResetLink(PasswordResetEmailRequestDto dto) {
-    Users user = userRepository.findByUsername(dto.getUsername())
-        .orElseThrow(UserException::userNotFound);
-    if (!user.getEmail().equals(dto.getEmail())) {
-      throw UserException.emailMismatch();
-    }
-    if (tokenService.isTokenPresentInRedis(TokenType.PASSWORD_RESET, user.getUsername())) {
-      tokenService.removeTokenFromRedis(TokenType.PASSWORD_RESET, user.getUsername());
-    }
-    String resetToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
-        TokenType.PASSWORD_RESET);
-    tokenService.saveTokenToRedis(TokenType.PASSWORD_RESET, user.getUsername(), resetToken);
-    emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+  public CompletableFuture<?> sendPasswordResetLink(PasswordResetEmailRequestDto dto) {
+    return CompletableFuture.runAsync(() -> {
+      Users user = getUserOrThrow(dto.getUsername());
+      validateEmailMatch(user, dto.getEmail());
+      String resetToken = generateAndSaveResetToken(user);
+      try {
+        emailService.sendPasswordResetEmail(user.getEmail(), resetToken);
+      } catch (Exception e) {
+        log.error("Failed to send password reset email to user: {}", user.getUsername(), e);
+        throw new RuntimeException("Failed to send password reset email", e);
+      }
+    });
   }
 
   @Override
   @Transactional
   public void resetPassword(ResetPasswordRequestDto dto) {
-    String username = tokenService.getUsernameFromToken(dto.getToken());
-    if (username == null) {
-      throw TokenException.invalidToken();
-    }
-
-    if (tokenService.isNotValidTokenFromRedis(TokenType.PASSWORD_RESET, username, dto.getToken())) {
-      throw TokenException.invalidToken();
-    }
-
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
-
-    if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
-      throw UserException.passwordConfirmMismatch();
-    }
-
-    user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
-    userRepository.save(user);
+    String username = validateAndExtractUsernameFromToken(dto.getToken(), TokenType.PASSWORD_RESET);
+    Users user = getUserOrThrow(username);
+    validateNewPasswordMatch(dto);
+    updateUserPassword(user, dto.getNewPassword());
     tokenService.removeTokenFromRedis(TokenType.PASSWORD_RESET, username);
   }
 
+  private void validateEmailMatch(Users user, String email) {
+    if (!user.getEmail().equals(email)) {
+      throw UserException.emailMismatch();
+    }
+  }
+
+  private String generateAndSaveResetToken(Users user) {
+    String resetToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
+        TokenType.PASSWORD_RESET);
+    tokenService.saveTokenToRedis(TokenType.PASSWORD_RESET, user.getUsername(), resetToken);
+    return resetToken;
+  }
+
+  // 이메일 인증 관련 메서드
   @Override
   @Transactional
   public void verifyEmail(String token) {
-    String username = tokenService.getUsernameFromToken(token);
-    if (tokenService.isNotValidTokenFromRedis(TokenType.EMAIL_VERIFICATION, username, token)) {
-      throw TokenException.invalidToken();
-    }
-    Users user = userRepository.findByUsername(username)
-        .orElseThrow(UserException::userNotFound);
+    String username = validateAndExtractUsernameFromToken(token, TokenType.EMAIL_VERIFICATION);
+    Users user = getUserOrThrow(username);
     user.setEmailVerified(true);
     userRepository.save(user);
     tokenService.removeTokenFromRedis(TokenType.EMAIL_VERIFICATION, username);
   }
 
-  @Scheduled(cron = "0 0 1 * * ?") // 매일 새벽 1시에 실행
-  @Transactional
-  public void cleanupOldLoginLogs() {
-    LocalDateTime cutoffDate = LocalDateTime.now().minusDays(loginLogRetentionDays);
-    loginLogRepository.deleteOlderThan(cutoffDate);
+  @Async
+  protected CompletableFuture<Void> sendVerificationEmail(Users user) {
+    return CompletableFuture.runAsync(() -> {
+      try {
+        String emailToken = tokenService.generateEmailToken(user.getUsername(), user.getEmail(),
+            TokenType.EMAIL_VERIFICATION);
+        tokenService.saveTokenToRedis(TokenType.EMAIL_VERIFICATION, user.getUsername(), emailToken);
+        emailService.sendVerificationEmail(user.getEmail(), emailToken);
+      } catch (Exception e) {
+        log.error("Failed to send verification email to user: {}", user.getUsername(), e);
+        throw new RuntimeException("Failed to send verification email", e);
+      }
+    });
   }
+
+  // 토큰 검증 관련 메서드
+  private String validateAndExtractUsernameFromToken(String token, TokenType tokenType) {
+    String username = tokenService.getUsernameFromToken(token);
+    if (username == null || tokenService.isNotValidTokenFromRedis(tokenType, username, token)) {
+      throw TokenException.invalidToken();
+    }
+    return username;
+  }
+
+  // 유틸리티 메서드
+  public Users getUserOrThrow(String username) {
+    return userRepository.findByUsername(username)
+        .orElseThrow(UserException::userNotFound);
+  }
+
+  private void validateNewPasswordMatch(ResetPasswordRequestDto dto) {
+    if (!dto.getNewPassword().equals(dto.getConfirmPassword())) {
+      throw UserException.passwordConfirmMismatch();
+    }
+  }
+
+  // 로그인 인증 관련 메서드
+  @Override
+  public boolean unlockWhenTimeExpired(Users user) {
+    if (user.isAccountNonLocked()) {
+      return true;
+    } else {
+      LocalDateTime lockTime = user.getLockTime();
+      if (LocalDateTime.now().isAfter(lockTime.plusMinutes(lockDurationMinutes))) {
+        user.setFailedAttempt(0);
+        user.setAccountNonLocked(true);
+        userRepository.save(user);
+        return true;
+      } else {
+        return false;
+      }
+    }
+  }
+
+  @Override
+  public void incrementFailedAttempts(Users user) {
+    int failedAttempts = user.getFailedAttempt() + 1;
+    user.setFailedAttempt(failedAttempts);
+    if (failedAttempts >= maxFailAttempts) {
+      lockUser(user);
+    } else {
+      userRepository.save(user);
+    }
+  }
+
+  @Override
+  public void lockUser(Users user) {
+    user.setLockTime(LocalDateTime.now());
+    user.setAccountNonLocked(false);
+    userRepository.save(user);
+  }
+
 }

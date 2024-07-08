@@ -1,32 +1,37 @@
 package com.hyunn.commerceplatform.service;
 
-import com.hyunn.commerceplatform.dto.auth.LoginRequestDto;
 import com.hyunn.commerceplatform.dto.auth.PasswordResetEmailRequestDto;
 import com.hyunn.commerceplatform.dto.auth.RegistrationRequestDto;
 import com.hyunn.commerceplatform.dto.auth.ResetPasswordRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersDetailResponseDto;
 import com.hyunn.commerceplatform.dto.users.UsersEmailUpdateRequestDto;
 import com.hyunn.commerceplatform.dto.users.UsersPasswordChangeRequestDto;
+import com.hyunn.commerceplatform.entity.Users;
+import java.util.concurrent.CompletableFuture;
 
 public interface UserService {
 
-  void registerUser(RegistrationRequestDto registrationRequest);
-
-  void loginUser(LoginRequestDto loginRequest);
+  void registerUser(RegistrationRequestDto requestDto);
 
   UsersDetailResponseDto getUserByUsername(String username);
 
   void deleteUser(String username);
 
-  void updateEmail(String username, UsersEmailUpdateRequestDto usersEmailUpdateRequestDto);
+  void updateEmail(String username, UsersEmailUpdateRequestDto dto);
 
-  void updatePassword(String username, UsersPasswordChangeRequestDto usersPasswordChangeRequestDto);
+  void updatePassword(String username, UsersPasswordChangeRequestDto dto);
 
-  void sendPasswordResetLink(PasswordResetEmailRequestDto passwordResetRequestDto);
+  CompletableFuture<?> sendPasswordResetLink(PasswordResetEmailRequestDto dto);
 
-  void resetPassword(ResetPasswordRequestDto resetPasswordRequestDto);
+  void resetPassword(ResetPasswordRequestDto dto);
 
   void verifyEmail(String token);
 
-  void cleanupOldLoginLogs();
+  Users getUserOrThrow(String username);
+
+  boolean unlockWhenTimeExpired(Users user);
+
+  void incrementFailedAttempts(Users user);
+
+  void lockUser(Users user);
 }

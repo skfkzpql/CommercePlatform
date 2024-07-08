@@ -10,7 +10,9 @@ import com.hyunn.commerceplatform.security.JwtTokenProvider.TokenType;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
 import jakarta.validation.Valid;
+import java.util.concurrent.CompletableFuture;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -22,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -46,9 +49,7 @@ public class AuthController {
               loginRequest.getPassword())
       );
       SecurityContextHolder.getContext().setAuthentication(authentication);
-      userService.loginUser(loginRequest);
       JwtAuthenticationResponse tokens = tokenService.generateAuthTokens(authentication);
-
       return ResponseEntity.status(HttpStatus.OK).body(tokens);
     } catch (Exception e) {
       throw UserException.invalidCredentials();
@@ -71,10 +72,12 @@ public class AuthController {
   }
 
   @PostMapping("/send-password-reset-link")
-  public ResponseEntity<?> sendPasswordResetLink(
+  public CompletableFuture<ResponseEntity<Object>> sendPasswordResetLink(
       @Valid @RequestBody PasswordResetEmailRequestDto passwordResetRequest) {
-    userService.sendPasswordResetLink(passwordResetRequest);
-    return ResponseEntity.status(HttpStatus.OK).build();
+    return userService.sendPasswordResetLink(passwordResetRequest)
+        .thenApply(result -> ResponseEntity.ok().build())
+        .exceptionally(ex -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+            .body("Error sending reset link"));
   }
 
   @PostMapping("/reset-password")

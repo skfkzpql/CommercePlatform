@@ -14,6 +14,7 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Temporal;
 import jakarta.persistence.TemporalType;
+import java.time.LocalDateTime;
 import java.util.Date;
 import java.util.List;
 import lombok.AllArgsConstructor;
@@ -49,6 +50,16 @@ public class Users {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
   private UserType userType;
+
+  @Column(nullable = false)
+  private boolean accountNonLocked = true;
+
+  @Column
+  private int failedAttempt;
+
+  @Column
+  private LocalDateTime lockTime;
+
 
   @Column(nullable = false, updatable = false)
   @Temporal(TemporalType.TIMESTAMP)

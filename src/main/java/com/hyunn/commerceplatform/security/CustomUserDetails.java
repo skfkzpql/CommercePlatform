@@ -4,12 +4,16 @@ import com.hyunn.commerceplatform.entity.Users;
 import java.util.Collection;
 import java.util.Collections;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 @Getter
-public record CustomUserDetails(Users user) implements UserDetails {
+@RequiredArgsConstructor
+public class CustomUserDetails implements UserDetails {
+
+  private final Users user;
 
   @Override
   public Collection<? extends GrantedAuthority> getAuthorities() {
@@ -28,8 +32,12 @@ public record CustomUserDetails(Users user) implements UserDetails {
   }
 
   @Override
+  public boolean isAccountNonLocked() {
+    return user.isAccountNonLocked();
+  }
+
+  @Override
   public boolean isEnabled() {
     return user.getEmailVerified();
   }
-
 }
