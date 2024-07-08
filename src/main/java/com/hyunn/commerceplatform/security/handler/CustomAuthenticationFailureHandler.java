@@ -3,7 +3,6 @@ package com.hyunn.commerceplatform.security.handler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hyunn.commerceplatform.entity.Users;
 import com.hyunn.commerceplatform.service.UserService;
-import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -29,7 +28,7 @@ public class CustomAuthenticationFailureHandler extends SimpleUrlAuthenticationF
 
   @Override
   public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
-      AuthenticationException exception) throws IOException, ServletException {
+      AuthenticationException exception) throws IOException {
     String username = request.getParameter("username");
     String errorMessage;
 
