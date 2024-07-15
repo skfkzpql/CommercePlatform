@@ -29,9 +29,4 @@ public interface UserService {
 
   Users getUserOrThrow(String username);
 
-  boolean unlockWhenTimeExpired(Users user);
-
-  void incrementFailedAttempts(Users user);
-
-  void lockUser(Users user);
 }

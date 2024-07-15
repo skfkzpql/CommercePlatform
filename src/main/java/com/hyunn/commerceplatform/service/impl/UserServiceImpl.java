@@ -22,7 +22,6 @@ import com.hyunn.commerceplatform.service.MandatoryTermsCacheService;
 import com.hyunn.commerceplatform.service.TokenService;
 import com.hyunn.commerceplatform.service.UserService;
 import com.hyunn.commerceplatform.util.ModelMapperUtil;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,7 +30,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -51,11 +49,6 @@ public class UserServiceImpl implements UserService {
   private final EmailService emailService;
   private final MandatoryTermsCacheService mandatoryTermsCacheService;
 
-  @Value("${app.login.max-fail-attempts}")
-  private int maxFailAttempts;
-
-  @Value("${app.login.lock-duration-minutes}")
-  private int lockDurationMinutes;
 
   // 사용자 등록 관련 메서드
   @Override
@@ -265,41 +258,4 @@ public class UserServiceImpl implements UserService {
       throw UserException.passwordConfirmMismatch();
     }
   }
-
-  // 로그인 인증 관련 메서드
-  @Override
-  public boolean unlockWhenTimeExpired(Users user) {
-    if (user.isAccountNonLocked()) {
-      return true;
-    } else {
-      LocalDateTime lockTime = user.getLockTime();
-      if (LocalDateTime.now().isAfter(lockTime.plusMinutes(lockDurationMinutes))) {
-        user.setFailedAttempt(0);
-        user.setAccountNonLocked(true);
-        userRepository.save(user);
-        return true;
-      } else {
-        return false;
-      }
-    }
-  }
-
-  @Override
-  public void incrementFailedAttempts(Users user) {
-    int failedAttempts = user.getFailedAttempt() + 1;
-    user.setFailedAttempt(failedAttempts);
-    if (failedAttempts >= maxFailAttempts) {
-      lockUser(user);
-    } else {
-      userRepository.save(user);
-    }
-  }
-
-  @Override
-  public void lockUser(Users user) {
-    user.setLockTime(LocalDateTime.now());
-    user.setAccountNonLocked(false);
-    userRepository.save(user);
-  }
-
 }

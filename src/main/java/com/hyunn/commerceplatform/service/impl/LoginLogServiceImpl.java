@@ -31,7 +31,7 @@ public class LoginLogServiceImpl implements LoginLogService {
   @Value("${geoip.database.path}")
   private String geoIpDatabasePath;
 
-  @Value("${login.log.retention.days}")
+  @Value("${app.login.log.retention.days}")
   private int loginLogRetentionDays;
 
   @Override
@@ -80,7 +80,7 @@ public class LoginLogServiceImpl implements LoginLogService {
   }
 
   // 스케줄링된 작업
-  @Scheduled(cron = "${login.log.cleanup.cron}")
+  @Scheduled(cron = "${app.login.log.cleanup.cron}")
   @Transactional
   public void cleanupOldLoginLogs() {
     LocalDateTime cutoffDate = LocalDateTime.now().minusDays(loginLogRetentionDays);

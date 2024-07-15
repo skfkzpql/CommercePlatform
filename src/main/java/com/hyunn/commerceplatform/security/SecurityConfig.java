@@ -3,7 +3,7 @@ package com.hyunn.commerceplatform.security;
 import com.hyunn.commerceplatform.security.handler.CustomAuthenticationFailureHandler;
 import com.hyunn.commerceplatform.security.handler.CustomAuthenticationSuccessHandler;
 import com.hyunn.commerceplatform.service.LoginLogService;
-import com.hyunn.commerceplatform.service.UserService;
+import com.hyunn.commerceplatform.service.UserLockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,7 +24,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
   private final JwtTokenProvider jwtTokenProvider;
-  private final UserService userService;
+  private final UserLockService userLockService;
   private final LoginLogService loginLogService;
   private final CustomUserDetailsService customUserDetailsService;
 
@@ -41,12 +41,12 @@ public class SecurityConfig {
 
   @Bean
   public CustomAuthenticationSuccessHandler authenticationSuccessHandler() {
-    return new CustomAuthenticationSuccessHandler(userService, loginLogService);
+    return new CustomAuthenticationSuccessHandler(userLockService, loginLogService);
   }
 
   @Bean
   public CustomAuthenticationFailureHandler authenticationFailureHandler() {
-    return new CustomAuthenticationFailureHandler(userService);
+    return new CustomAuthenticationFailureHandler(userLockService);
   }
 
   @Bean

@@ -2,7 +2,7 @@ package com.hyunn.commerceplatform.security.handler;
 
 import com.hyunn.commerceplatform.entity.Users;
 import com.hyunn.commerceplatform.service.LoginLogService;
-import com.hyunn.commerceplatform.service.UserService;
+import com.hyunn.commerceplatform.service.UserLockService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -17,7 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
-  private final UserService userService;
+  private final UserLockService userLockService;
   private final LoginLogService loginLogService;
 
   @Override
@@ -25,10 +25,9 @@ public class CustomAuthenticationSuccessHandler extends SimpleUrlAuthenticationS
   public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
       Authentication authentication) throws IOException, ServletException {
     String username = authentication.getName();
-    Users user = userService.getUserOrThrow(username);
+    Users user = userLockService.getUserOrThrow(username);
     loginLogService.recordLoginLog(user);
 
     super.onAuthenticationSuccess(request, response, authentication);
   }
-
 }
