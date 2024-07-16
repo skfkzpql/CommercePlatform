@@ -23,4 +23,14 @@ public class GlobalExceptionHandler {
     return ResponseEntity.status(e.getStatus()).body(e.getMessage());
   }
 
+  @ExceptionHandler(BusinessException.class)
+  public ResponseEntity<String> handleBusinessException(BusinessException e) {
+    return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+  }
+
+  @ExceptionHandler(PublicDataVerificationException.class)
+  public ResponseEntity<String> handlePublicDataVerificationException(
+      PublicDataVerificationException e) {
+    return ResponseEntity.status(e.getStatus()).body(e.getMessage());
+  }
 }
